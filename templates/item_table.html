@@ -1,0 +1,72 @@
+
+<div class="item-grid">
+
+    {% for i in items %}
+
+    <article class="item-card">
+
+        {% if i.image_path %}
+            <img class="item-photo"
+                 src="{{ url_for('static', filename=i.image_path) }}"
+                 alt="Photo of {{ i.item_name }}">
+        {% else %}
+            <div class="item-photo placeholder">No photo</div>
+        {% endif %}
+
+        <div class="item-content">
+
+            <small>
+                #{{ i.item_id }} · {{ i.report_type }} · {{ i.status }}
+            </small>
+
+            <h3>{{ i.item_name }}</h3>
+
+            <p>{{ i.description or 'No description provided.' }}</p>
+
+            <p class="muted">
+                {{ i.category_name }} · {{ i.location_name }} · {{ i.item_date }}
+            </p>
+
+            <p class="muted">
+                Reported by {{ i.reporter }}<br>
+
+                Email:
+                <a href="mailto:{{ i.reporter_email }}">
+                    {{ i.reporter_email }}
+                </a>
+                <br>
+
+                Mobile:
+                {% if i.reporter_mobile %}
+                    <a href="tel:{{ i.reporter_mobile }}">
+                        {{ i.reporter_mobile }}
+                    </a>
+                {% else %}
+                    Not provided
+                {% endif %}
+            </p>
+
+            <p>
+                <a href="{{ url_for('item_tracking', item_id=i.item_id) }}">
+                    View tracking history →
+                </a>
+            </p>
+
+            {% if i.report_type == 'Found' and i.status == 'Open' and i.reporter_id != session.get('user_id') %}
+                <form method="post"
+                      action="{{ url_for('claim', item_id=i.item_id) }}">
+                    <button type="submit">Claim this item</button>
+                </form>
+            {% endif %}
+
+        </div>
+
+    </article>
+
+    {% else %}
+
+        <p>No records found.</p>
+
+    {% endfor %}
+
+</div>

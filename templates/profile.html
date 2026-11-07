@@ -1,0 +1,46 @@
+
+{% extends 'base.html' %}
+
+{% block content %}
+
+<div class="card narrow">
+
+    <h2>My profile</h2>
+
+    {% if user.profile_image_path %}
+        <img class="avatar-large"
+            src="{{ url_for('static', filename=user.profile_image_path) }}"
+            alt="Profile photo">
+    {% else %}
+        <div class="avatar-large placeholder">👤</div>
+    {% endif %}
+
+    <p><b>{{ user.full_name }}</b></p>
+    <p>{{ user.email }} · {{ user.role }}</p>
+    <p>Roll number: {{ user.roll_no or 'Not provided' }}</p>
+
+    <form method="post" enctype="multipart/form-data">
+
+        <label>Mobile number (10 digits)</label>
+        <input
+            type="tel"
+            name="mobile_number"
+            value="{{ user.mobile_number or '' }}"
+            pattern="[0-9]{10}"
+            minlength="10"
+            maxlength="10"
+            inputmode="numeric"
+            placeholder="Enter 10-digit mobile number"
+            required
+        >
+
+        <label>Change profile photo (optional)</label>
+        <input type="file" name="profile_image" accept="image/*">
+
+        <button type="submit">Update profile</button>
+
+    </form>
+
+</div>
+
+{% endblock %}

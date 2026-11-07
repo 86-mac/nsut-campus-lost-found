@@ -1,0 +1,44 @@
+
+{% extends 'base.html' %}
+
+{% block content %}
+
+<div class="card" style="max-width:480px;margin:35px auto">
+
+    <h2>Create student account</h2>
+
+    <form method="post" enctype="multipart/form-data">
+
+        <label>Full name</label>
+        <input type="text" name="full_name" required>
+
+        <label>College email</label>
+        <input type="email" name="email" required>
+
+        <label>Mobile number (10 digits)</label>
+        <input type="tel"
+            name="mobile_number"
+            pattern="[0-9]{10}"
+            maxlength="10"
+            minlength="10"
+            inputmode="numeric"
+            placeholder="Enter 10-digit mobile number"
+            required>
+
+        <label>Roll number (optional)</label>
+        <input type="text" name="roll_no">
+
+        <label>Password (minimum 8 characters)</label>
+        <input type="password" name="password" minlength="8" required>
+
+        <label>Profile photo (optional)</label>
+        <input type="file" name="profile_image" accept="image/*">
+
+        <button type="submit">Register</button>
+
+    </form>
+
+</div>
+
+{% endblock %}
+

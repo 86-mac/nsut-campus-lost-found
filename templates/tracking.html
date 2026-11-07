@@ -1,0 +1,26 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="card">
+  <p><a href="{{ url_for('items') }}">← Back to items</a></p>
+  <h2>Item tracking history</h2>
+  <h3>#{{ item.item_id }} · {{ item.item_name }}</h3>
+  <p class="muted">{{ item.report_type }} · Current status: <strong>{{ item.status }}</strong> · Reported by {{ item.reporter }} · Email: <a href="mailto:{{ item.reporter_email }}">{{ item.reporter_email }}</a></p>
+  {% if item.image_path %}<img class="item-photo" src="{{ url_for('static', filename=item.image_path) }}" alt="Photo of {{ item.item_name }}">{% endif %}
+</div>
+<div class="card">
+  <h3>Activity timeline</h3>
+  {% if events %}
+    <ol class="tracking-list">
+    {% for event in events %}
+      <li class="tracking-event">
+        <strong>{{ event.event }}</strong>
+        <p>{{ event.details or '' }}</p>
+        <small class="muted">{{ event.created_at }}{% if event.actor_name %} · By {{ event.actor_name }}{% endif %}</small>
+      </li>
+    {% endfor %}
+    </ol>
+  {% else %}
+    <p>No tracking events have been recorded for this item yet.</p>
+  {% endif %}
+</div>
+{% endblock %}

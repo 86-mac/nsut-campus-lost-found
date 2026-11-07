@@ -1,0 +1,180 @@
+
+{% extends 'base.html' %}
+
+{% block content %}
+
+<h2>Administrator dashboard</h2>
+
+<div class="grid">
+    <div class="stat">
+        <b>{{ users_count }}</b>
+        Users
+    </div>
+
+    <div class="stat">
+        <b>{{ items_count }}</b>
+        Items
+    </div>
+
+    <div class="stat">
+        <b>{{ pending_count }}</b>
+        Pending claims
+    </div>
+</div>
+
+<!-- Manage item reports -->
+<div class="card">
+
+    <h3>Manage item reports</h3>
+
+    <table>
+        <tr>
+            <th>ID / Photo</th>
+            <th>Item</th>
+            <th>Reporter</th>
+            <th>Reporter email</th>
+            <th>Reporter mobile</th>
+            <th>Type</th>
+            <th>Status</th>
+            <th>Update status</th>
+        </tr>
+
+        {% for i in items %}
+        <tr>
+            <td>
+                #{{ i.item_id }}
+                {% if i.image_path %}
+                    <br>
+                    <img class="table-photo"
+                        src="{{ url_for('static', filename=i.image_path) }}">
+                {% endif %}
+            </td>
+
+            <td>{{ i.item_name }}</td>
+
+            <td>{{ i.reporter }}</td>
+
+            <td>
+                <a href="mailto:{{ i.reporter_email }}">
+                    {{ i.reporter_email }}
+                </a>
+            </td>
+
+            <td>
+                {% if i.reporter_mobile %}
+                    <a href="tel:{{ i.reporter_mobile }}">
+                        {{ i.reporter_mobile }}
+                    </a>
+                {% else %}
+                    -
+                {% endif %}
+            </td>
+
+            <td>{{ i.report_type }}</td>
+
+            <td>{{ i.status }}</td>
+
+            <td>
+                <form method="post"
+                      action="{{ url_for('admin_item_status', item_id=i.item_id) }}">
+
+                    <select name="status">
+                        <option {% if i.status=='Open' %}selected{% endif %}>Open</option>
+                        <option {% if i.status=='Claimed' %}selected{% endif %}>Claimed</option>
+                        <option {% if i.status=='Returned' %}selected{% endif %}>Returned</option>
+                        <option {% if i.status=='Resolved' %}selected{% endif %}>Resolved</option>
+                    </select>
+
+                    <button type="submit">Save</button>
+
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+
+</div>
+
+<!-- Manage users -->
+<div class="card">
+
+    <h3>Manage users and administrator access</h3>
+
+    <p>
+        Promote trusted staff accounts to admin.
+        Admins can view all claims and reports.
+    </p>
+
+    <table>
+
+        <tr>
+            <th>User</th>
+            <th>Email</th>
+            <th>Mobile number</th>
+            <th>Roll no.</th>
+            <th>Role</th>
+            <th>Change role</th>
+        </tr>
+
+        {% for u in users %}
+        <tr>
+
+            <td>{{ u.full_name }}</td>
+
+            <td>
+                <a href="mailto:{{ u.email }}">{{ u.email }}</a>
+            </td>
+
+            <td>
+                {% if u.mobile_number %}
+                    <a href="tel:{{ u.mobile_number }}">
+                        {{ u.mobile_number }}
+                    </a>
+                {% else %}
+                    -
+                {% endif %}
+            </td>
+
+            <td>{{ u.roll_no or '-' }}</td>
+
+            <td>{{ u.role }}</td>
+
+            <td>
+                {% if u.user_id != session.get('user_id') %}
+
+                    <form method="post"
+                        action="{{ url_for('admin_user_role', user_id=u.user_id) }}">
+
+                        <select name="role">
+                            <option value="student"
+                                {% if u.role=='student' %}selected{% endif %}>
+                                Student
+                            </option>
+
+                            <option value="admin"
+                                {% if u.role=='admin' %}selected{% endif %}>
+                                Admin
+                            </option>
+                        </select>
+
+                        <button type="submit">Update</button>
+
+                    </form>
+
+                {% else %}
+                    Current account
+                {% endif %}
+            </td>
+
+        </tr>
+        {% endfor %}
+
+    </table>
+
+</div>
+
+<p>
+    <a href="{{ url_for('claims') }}">Review all claims →</a>
+</p>
+
+{% endblock %}
