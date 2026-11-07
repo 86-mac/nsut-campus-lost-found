@@ -6,6 +6,10 @@ from email.message import EmailMessage
 from functools import wraps
 from pathlib import Path
 from uuid import uuid4
+import json
+import urllib.request
+import urllib.error
+import os
 
 from flask import Flask, render_template, request, redirect, url_for, session, flash, abort
 from werkzeug.utils import secure_filename
@@ -35,30 +39,48 @@ def get_db():
     return mysql.connector.connect(**DB_CONFIG)
 
 
+
 def send_email(to_email, subject, body):
-    """Send mail when SMTP is configured; never expose SMTP credentials to users."""
-    host = os.getenv("SMTP_HOST")
-    username = os.getenv("SMTP_USERNAME")
-    password = os.getenv("SMTP_PASSWORD")
-    sender = os.getenv("SMTP_FROM") or username
-    if not all([host, username, password, sender, to_email]):
-        app.logger.warning("Email not sent: configure SMTP_HOST, SMTP_USERNAME, SMTP_PASSWORD and SMTP_FROM.")
+    api_key = os.getenv("RESEND_API_KEY")
+    from_email = os.getenv("RESEND_FROM_EMAIL", "onboarding@resend.dev")
+
+    if not api_key:
+        app.logger.warning("Email not sent: RESEND_API_KEY is missing.")
         return False
-    msg = EmailMessage()
-    msg["Subject"] = subject
-    msg["From"] = sender
-    msg["To"] = to_email
-    msg.set_content(body)
+
+    payload = {
+        "from": from_email,
+        "to": [to_email],
+        "subject": subject,
+        "text": body
+    }
+
+    data = json.dumps(payload).encode("utf-8")
+
+    request = urllib.request.Request(
+        "https://api.resend.com/emails",
+        data=data,
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        },
+        method="POST"
+    )
+
     try:
-        port = int(os.getenv("SMTP_PORT", "587"))
-        with smtplib.SMTP(host, port, timeout=15) as server:
-            server.starttls()
-            server.login(username, password)
-            server.send_message(msg)
-        return True
-    except Exception:
-        app.logger.exception("Email delivery failed")
+        with urllib.request.urlopen(request, timeout=20) as response:
+            app.logger.info("Email sent successfully through Resend.")
+            return True
+
+    except urllib.error.HTTPError as e:
+        error = e.read().decode("utf-8", errors="replace")
+        app.logger.error("Resend email error: %s", error)
         return False
+
+    except Exception:
+        app.logger.exception("Resend email delivery failed.")
+        return False
+
 
 
 def notify_user(user_id, message, subject="NSUT Campus Lost & Found update"):
