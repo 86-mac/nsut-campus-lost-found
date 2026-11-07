@@ -1,1 +1,81 @@
-{% extends 'base.html' %}{% block content %}<div class="card"><h2>Claims</h2><table><tr><th>ID</th><th>Item</th><th>Claimant</th><th>Date</th><th>Status</th>{% if session.get('role')=='admin' %}<th>Decision</th>{% endif %}</tr>{% for c in claims %}<tr><td>{{ c.claim_id }}</td><td>{{ c.item_name }}</td><td>{{ c.claimant }}</td><td>{{ c.claim_date }}</td><td>{{ c.claim_status }}</td>{% if session.get('role')=='admin' %}<td>{% if c.claim_status=='Pending' %}<form class="inline" method="post" action="{{ url_for('decide_claim',claim_id=c.claim_id,decision='approve') }}"><button>Approve</button></form><form class="inline" method="post" action="{{ url_for('decide_claim',claim_id=c.claim_id,decision='reject') }}"><button>Reject</button></form>{% endif %}</td>{% endif %}</tr>{% else %}<tr><td colspan="6">No claims yet.</td></tr>{% endfor %}</table></div>{% endblock %}
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="card">
+    <h2>Claims & Return Confirmation</h2>
+
+    <table>
+        <tr>
+            <th>ID</th>
+            <th>Item</th>
+            <th>Finder</th>
+            <th>Claimant</th>
+            <th>Date</th>
+            <th>Status</th>
+            <th>Handover</th>
+            {% if session.get('role') == 'admin' %}
+                <th>Decision</th>
+            {% endif %}
+        </tr>
+
+        {% for c in claims %}
+        <tr>
+            <td>{{ c.claim_id }}</td>
+            <td>{{ c.item_name }}</td>
+            <td>{{ c.finder }}</td>
+            <td>{{ c.claimant }}</td>
+            <td>{{ c.claim_date }}</td>
+            <td>{{ c.claim_status }}</td>
+
+            <td>
+                {% if c.claim_status == 'Approved' %}
+
+                    <p>Finder: {{ 'Confirmed' if c.finder_confirmed else 'Waiting' }}</p>
+                    <p>Claimant: {{ 'Confirmed' if c.claimant_confirmed else 'Waiting' }}</p>
+
+                    {% if session.get('user_id') == c.reporter_id and not c.finder_confirmed %}
+                        <form method="post" action="{{ url_for('confirm_handover', claim_id=c.claim_id) }}">
+                            <button type="submit">Confirm Handover</button>
+                        </form>
+                    {% elif session.get('user_id') == c.claimant_id and not c.claimant_confirmed %}
+                        <form method="post" action="{{ url_for('confirm_handover', claim_id=c.claim_id) }}">
+                            <button type="submit">Confirm Received</button>
+                        </form>
+                    {% endif %}
+
+                    {% if c.finder_confirmed and c.claimant_confirmed %}
+                        <strong>Successfully Returned</strong>
+                    {% endif %}
+
+                {% elif c.claim_status == 'Pending' %}
+                    Waiting for admin approval.
+                {% elif c.claim_status == 'Rejected' %}
+                    Claim rejected.
+                {% endif %}
+            </td>
+
+            {% if session.get('role') == 'admin' %}
+            <td>
+                {% if c.claim_status == 'Pending' %}
+                    <form method="post" action="{{ url_for('decide_claim', claim_id=c.claim_id, decision='approve') }}">
+                        <button type="submit">Approve</button>
+                    </form>
+
+                    <form method="post" action="{{ url_for('decide_claim', claim_id=c.claim_id, decision='reject') }}">
+                        <button type="submit">Reject</button>
+                    </form>
+                {% else %}
+                    -
+                {% endif %}
+            </td>
+            {% endif %}
+        </tr>
+
+        {% else %}
+        <tr>
+            <td colspan="8">No claims yet.</td>
+        </tr>
+        {% endfor %}
+    </table>
+</div>
+{% endblock %}

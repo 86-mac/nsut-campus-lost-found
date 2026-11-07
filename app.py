@@ -401,43 +401,230 @@ def claim(item_id):
     return redirect(url_for("items"))
 
 
+
+
+
+
+
+
 @app.route("/claims")
 @login_required
 def claims():
-    conn = get_db(); cur = conn.cursor(dictionary=True)
-    sql = "SELECT c.*, i.item_name, u.full_name claimant FROM claims c JOIN items i ON i.item_id=c.item_id JOIN users u ON u.user_id=c.claimant_id"
+    conn = get_db()
+    cur = conn.cursor(dictionary=True)
+
+    sql = """
+        SELECT c.*, i.item_name, i.reporter_id,
+               claimant.full_name AS claimant,
+               finder.full_name AS finder
+        FROM claims c
+        JOIN items i ON i.item_id = c.item_id
+        JOIN users claimant ON claimant.user_id = c.claimant_id
+        JOIN users finder ON finder.user_id = i.reporter_id
+    """
+
     args = ()
+
     if session.get("role") != "admin":
-        sql += " WHERE c.claimant_id=%s"; args = (session["user_id"],)
+        sql += " WHERE c.claimant_id=%s OR i.reporter_id=%s"
+        args = (session["user_id"], session["user_id"])
+
     cur.execute(sql + " ORDER BY c.claim_date DESC", args)
-    rows = cur.fetchall(); cur.close(); conn.close()
+    rows = cur.fetchall()
+
+    cur.close()
+    conn.close()
+
     return render_template("claims.html", claims=rows)
 
 
 @app.route("/claim/<int:claim_id>/<decision>", methods=["POST"])
 @admin_required
 def decide_claim(claim_id, decision):
+
     if decision not in ("approve", "reject"):
         abort(400)
-    conn = get_db(); cur = conn.cursor(dictionary=True)
-    cur.execute("SELECT c.*, i.item_name FROM claims c JOIN items i ON i.item_id=c.item_id WHERE c.claim_id=%s", (claim_id,))
+
+    conn = get_db()
+    cur = conn.cursor(dictionary=True)
+
+    cur.execute("""
+        SELECT c.*, i.item_name, i.reporter_id
+        FROM claims c
+        JOIN items i ON i.item_id = c.item_id
+        WHERE c.claim_id = %s
+    """, (claim_id,))
+
     c = cur.fetchone()
-    if c and c["claim_status"] == "Pending":
-        status = "Approved" if decision == "approve" else "Rejected"
-        item_status = "Returned" if decision == "approve" else "Open"
-        cur.execute("UPDATE claims SET claim_status=%s WHERE claim_id=%s", (status, claim_id))
-        cur.execute("UPDATE items SET status=%s WHERE item_id=%s", (item_status, c["item_id"]))
-        record_tracking_event(
-            cur, c["item_id"], f"Claim {status.lower()}",
-            f"Claim #{claim_id} was {status.lower()} by an administrator. Item status: {item_status}.",
-            session["user_id"],
+
+    if not c or c["claim_status"] != "Pending":
+        cur.close()
+        conn.close()
+        flash("Claim not found or already processed.", "warning")
+        return redirect(url_for("claims"))
+
+    status = "Approved" if decision == "approve" else "Rejected"
+
+    cur.execute(
+        "UPDATE claims SET claim_status=%s WHERE claim_id=%s",
+        (status, claim_id)
+    )
+
+    if decision == "reject":
+        cur.execute(
+            "UPDATE items SET status='Open' WHERE item_id=%s",
+            (c["item_id"],)
         )
-        conn.commit()
-        notify_user(c["claimant_id"], f'Your claim #{claim_id} for "{c["item_name"]}" was {status.lower()}.', "Claim decision")
-        flash(f"Claim {status.lower()}.", "success")
-    cur.close(); conn.close()
+        details = f"Claim #{claim_id} was rejected. Item is available again."
+    else:
+        details = (
+            f"Claim #{claim_id} was approved. "
+            "Waiting for finder and claimant to confirm handover."
+        )
+
+    record_tracking_event(
+        cur, c["item_id"], f"Claim {status.lower()}",
+        details, session["user_id"]
+    )
+
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    notify_user(
+        c["claimant_id"],
+        f'Your claim #{claim_id} for "{c["item_name"]}" was {status.lower()}.',
+        "Claim decision"
+    )
+
+    notify_user(
+        c["reporter_id"],
+        f'The claim #{claim_id} for your found item "{c["item_name"]}" was {status.lower()}.',
+        "Claim decision"
+    )
+
+    flash(f"Claim {status.lower()}.", "success")
     return redirect(url_for("claims"))
 
+
+@app.route("/claim/<int:claim_id>/confirm", methods=["POST"])
+@login_required
+def confirm_handover(claim_id):
+
+    conn = get_db()
+    cur = conn.cursor(dictionary=True)
+
+    cur.execute("""
+        SELECT c.*, i.item_name, i.reporter_id
+        FROM claims c
+        JOIN items i ON i.item_id = c.item_id
+        WHERE c.claim_id = %s
+    """, (claim_id,))
+
+    c = cur.fetchone()
+
+    if not c:
+        cur.close()
+        conn.close()
+        abort(404)
+
+    user_id = session["user_id"]
+
+    if user_id not in (c["claimant_id"], c["reporter_id"]):
+        cur.close()
+        conn.close()
+        abort(403)
+
+    if c["claim_status"] != "Approved":
+        cur.close()
+        conn.close()
+        flash("Only approved claims can confirm handover.", "warning")
+        return redirect(url_for("claims"))
+
+    if user_id == c["reporter_id"]:
+        if c["finder_confirmed"]:
+            cur.close()
+            conn.close()
+            flash("You have already confirmed the handover.", "info")
+            return redirect(url_for("claims"))
+
+        cur.execute(
+            "UPDATE claims SET finder_confirmed=1 WHERE claim_id=%s",
+            (claim_id,)
+        )
+        who = "Finder"
+        event = "Finder confirmed handover"
+
+    else:
+        if c["claimant_confirmed"]:
+            cur.close()
+            conn.close()
+            flash("You have already confirmed the handover.", "info")
+            return redirect(url_for("claims"))
+
+        cur.execute(
+            "UPDATE claims SET claimant_confirmed=1 WHERE claim_id=%s",
+            (claim_id,)
+        )
+        who = "Claimant"
+        event = "Claimant confirmed handover"
+
+    cur.execute("""
+        SELECT finder_confirmed, claimant_confirmed
+        FROM claims
+        WHERE claim_id=%s
+    """, (claim_id,))
+
+    confirmations = cur.fetchone()
+
+    if confirmations["finder_confirmed"] and confirmations["claimant_confirmed"]:
+
+        cur.execute(
+            "UPDATE items SET status='Returned' WHERE item_id=%s",
+            (c["item_id"],)
+        )
+
+        record_tracking_event(
+            cur, c["item_id"], "Item returned",
+            f"Both students confirmed handover for claim #{claim_id}.",
+            user_id
+        )
+
+        message = (
+            f'Item "{c["item_name"]}" has been successfully returned. '
+            "Both students confirmed the handover."
+        )
+
+        completed = True
+
+    else:
+
+        record_tracking_event(
+            cur, c["item_id"], event,
+            f"{who} confirmed the handover for claim #{claim_id}.",
+            user_id
+        )
+
+        message = (
+            f'{who} confirmed the handover of "{c["item_name"]}". '
+            "Waiting for the other student to confirm."
+        )
+
+        completed = False
+
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    notify_user(c["claimant_id"], message, "Item return update")
+    notify_user(c["reporter_id"], message, "Item return update")
+
+    if completed:
+        flash("Both students confirmed. Item marked as Returned!", "success")
+    else:
+        flash("Your confirmation was saved. Waiting for the other student.", "success")
+
+    return redirect(url_for("claims"))
 
 @app.route("/item/<int:item_id>/tracking")
 @login_required
